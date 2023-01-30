@@ -1,0 +1,24 @@
+import_C("stm32f4xx_hal.h");
+import_C("stm32f4xx_hal_uart.h");
+signature sADC {
+	void Initialize([inout]ADC_HandleTypeDef* hadc);
+	void StartDMA([inout]ADC_HandleTypeDef* hadc, [inout]uint32_t* pData, [in]uint32_t Length);
+};
+
+celltype tADC {
+	entry sADC eADC;
+	attr{
+    	uint32_t ClockPrescaler; 
+    	uint32_t Resolution;
+    	uint32_t ScanConvMode;
+    	uint32_t ContinuousConvMode;
+    	uint32_t DiscontinuousConvMode;
+    	uint32_t ExternalTrigConvEdge;
+    	uint32_t ExternalTrigConv;
+    	uint32_t DataAlign;
+    	uint32_t NbrOfConversion;
+    	uint32_t NbrOfDiscConversion;
+    	uint32_t DMAContinuousRequests;
+    	uint32_t EOCSelection;
+	};
+};

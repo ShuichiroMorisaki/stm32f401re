@@ -156,6 +156,10 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 
+/*-- aaded by morisaki --*/
+//#include ""
+/*-- end --*/
+
 /** @addtogroup STM32F4xx_HAL_Driver
   * @{
   */

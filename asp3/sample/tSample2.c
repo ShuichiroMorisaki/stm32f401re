@@ -115,10 +115,57 @@
 #include <t_stdlib.h>
 #include "kernel_cfg.h"
 #include "tSample2.h"
+#include <stdio.h>
 
 /*
- *  サービスコールのエラーのログ出力
+ *  Add by Morisaki
  */
+#include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_def.h"
+//#include "stm32f4xe.h"
+#include "stm32f4xx_hal_uart.h"
+#include "stm32f4xx_hal_gpio.h"
+#include "stm32f4xx_hal_rcc.h"
+#include "stm32f4xx_hal_adc.h"
+//#include "adc.h"
+//#include "joytest.h"
+//#include "../arch/arm_m_gcc/stm32f4xx_stm32cube/Inc/Former/device.h"
+//p#include "adctest.h"
+
+volatile UART_HandleTypeDef huart2;
+volatile ADC_HandleTypeDef hadc1; 
+volatile DMA_HandleTypeDef hdma_adc1;
+
+
+#define JS_OFF      0x00
+#define JS_ON       0x01
+#define JS_UP       0x02
+#define JS_DOWN     0x03
+#define JS_LEFT     0x04
+#define JS_RIGHT    0x05
+#define NUM_JSPOSITION (JS_RIGHT+1)
+
+volatile uint16_t adc_data;
+static uint32_t pos_tbl[NUM_JSPOSITION][2] = {
+  {  500, JS_DOWN  },
+  { 1000, JS_RIGHT },
+  { 1500, JS_ON    },
+  { 2500, JS_UP    },
+  { 3800, JS_LEFT  },
+  { 4096, JS_OFF   }
+};
+static char *pos_str[NUM_JSPOSITION] = {
+  "    OFF     ",
+  "    ON      ",
+  "    UP      ",
+  "    DOWN    ",
+  "    LEFT    ",
+  "    RIGHT   "
+};
+
+#define TOPPERS_OMIT_SYSLOG
+
+
 Inline void
 svc_perror(const char *file, int_t line, const char *expr, ER ercd)
 {
@@ -126,7 +173,6 @@ svc_perror(const char *file, int_t line, const char *expr, ER ercd)
 		t_perror(LOG_ERROR, file, line, expr, ercd);
 	}
 }
-
 #define	SVC_PERROR(expr)	svc_perror(__FILE__, __LINE__, #expr, (expr))
 
 /*
@@ -147,168 +193,6 @@ consume_time(ulong_t ctime)
 	}
 }
 
-/*
- *  並行実行されるタスクへのメッセージ領域
- */
-char	message[3];
-
-/*
- *  ループ回数
- */
-ulong_t	task_loop;		/* タスク内でのループ回数 */
-
-/*
- *  並行実行されるタスク
- */
-void
-eSampleTask_main(int_t subscript)
-{
-	int_t		n = 0;
-	int_t		tskno = subscript + 1; 
-	const char	*graph[] = { "|", "  +", "    *" };
-	char		c;
-
-	while (true) {
-		syslog(LOG_NOTICE, "task%d is running (%03d).   %s",
-										tskno, ++n, graph[tskno-1]);
-		consume_time(task_loop);
-		c = message[tskno-1];
-		message[tskno-1] = 0;
-		switch (c) {
-		case 'e':
-			syslog(LOG_INFO, "#%d#exit()", tskno);
-			SVC_PERROR(exit());
-			assert(0);
-		case 's':
-			syslog(LOG_INFO, "#%d#sleep()", tskno);
-			SVC_PERROR(sleep());
-			break;
-		case 'S':
-			syslog(LOG_INFO, "#%d#sleepTimeout(10000)", tskno);
-			SVC_PERROR(sleepTimeout(10000));
-			break;
-		case 'd':
-			syslog(LOG_INFO, "#%d#delay(10000)", tskno);
-			SVC_PERROR(delay(10000));
-			break;
-		case 'y':
-			syslog(LOG_INFO, "#%d#disableTerminate()", tskno);
-			SVC_PERROR(disableTerminate());
-			break;
-		case 'Y':
-			syslog(LOG_INFO, "#%d#enableTerminate()", tskno);
-			SVC_PERROR(enableTerminate());
-			break;
-#ifdef CPUEXC1
-		case 'z':
-			syslog(LOG_NOTICE, "#%d#raise CPU exception", tskno);
-			RAISE_CPU_EXCEPTION;
-			break;
-		case 'Z':
-			SVC_PERROR(lockCpu());
-			syslog(LOG_NOTICE, "#%d#raise CPU exception", tskno);
-			RAISE_CPU_EXCEPTION;
-			SVC_PERROR(unlockCpu());
-			break;
-#endif /* CPUEXC1 */
-		default:
-			break;
-		}
-	}
-}
-
-/*
- *  割込みサービスルーチン
- *
- *  HIGH_PRIORITY，MID_PRIORITY，LOW_PRIORITY の各優先度のレディキュー
- *  を回転させる．
- */
-#ifdef INTNO1
-
-void
-eiISR_main(void)
-{
-	intno1_clear();
-	SVC_PERROR(ciKernel_rotateReadyQueue(HIGH_PRIORITY));
-	SVC_PERROR(ciKernel_rotateReadyQueue(MID_PRIORITY));
-	SVC_PERROR(ciKernel_rotateReadyQueue(LOW_PRIORITY));
-}
-
-#endif /* INTNO1 */
-
-/*
- *  CPU例外ハンドラ
- */
-ID	cpuexc_tskid;		/* CPU例外を起こしたタスクのID */
-
-#ifdef CPUEXC1
-
-void
-eiCpuExceptionHandler_main(const void *p_excinf)
-{
-	
-	syslog(LOG_NOTICE, "CPU exception handler (p_excinf = %08p).", p_excinf);
-	if (ciKernel_senseContext() != true) {
-		syslog(LOG_WARNING, "ciKernel_senseContext() is not true"
-											" in CPU exception handler.");
-	}
-	if (ciKernel_senseDispatchPendingState() != true) {
-		syslog(LOG_WARNING, "ciKernel_senseDispatchPendingState() is not true"
-											" in CPU exception handler.");
-	}
-	syslog(LOG_INFO, "ciKernel_senseLock() = %d, ciKernel_senseDispatch() = %d",
-						ciKernel_senseLock(), ciKernel_senseDispatch());
-	syslog(LOG_INFO, "ciKernel_exceptionSenseDispatchPendingState() = %d",
-						ciKernel_exceptionSenseDispatchPendingState(p_excinf));
-
-	if (ciKernel_exceptionSenseDispatchPendingState(p_excinf)) {
-		syslog(LOG_NOTICE, "Sample program ends with exception.");
-		SVC_PERROR(ciKernel_exitKernel());
-		assert(0);
-	}
-
-	SVC_PERROR(ciKernel_getTaskId(&cpuexc_tskid));
-	cExceptionTask_activate();
-}
-
-#endif /* CPUEXC1 */
-
-/*
- *  周期ハンドラ
- *
- *  HIGH_PRIORITY，MID_PRIORITY，LOW_PRIORITY の各優先度のレディキュー
- *  を回転させる．
- */
-void
-eiCyclicHandler_main(void)
-{
-	SVC_PERROR(ciKernel_rotateReadyQueue(HIGH_PRIORITY));
-	SVC_PERROR(ciKernel_rotateReadyQueue(MID_PRIORITY));
-	SVC_PERROR(ciKernel_rotateReadyQueue(LOW_PRIORITY));
-}
-
-/*
- *  アラームハンドラ
- *
- *  HIGH_PRIORITY，MID_PRIORITY，LOW_PRIORITY の各優先度のレディキュー
- *  を回転させる．
- */
-void
-eiAlarmHandler_main(void)
-{
-	SVC_PERROR(ciKernel_rotateReadyQueue(HIGH_PRIORITY));
-	SVC_PERROR(ciKernel_rotateReadyQueue(MID_PRIORITY));
-	SVC_PERROR(ciKernel_rotateReadyQueue(LOW_PRIORITY));
-}
-
-/*
- *  例外処理タスク
- */
-void
-eExceptionTask_main(void)
-{
-	SVC_PERROR(ras_ter(cpuexc_tskid));
-}
 
 /*
  *  メインタスク
@@ -316,225 +200,181 @@ eExceptionTask_main(void)
 void
 eMainTask_main(void)
 {
-	char	c;
-	int_t	tskno = 1;
-	ER_UINT	ercd;
-	PRI		tskpri;
-#ifndef TASK_LOOP
-	SYSTIM	stime1, stime2;
-#endif /* TASK_LOOP */
-	HRTCNT	hrtcnt1, hrtcnt2;
+  setbuf(stdout, NULL);
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_ADC2_ADC_Init();
+  MX_USART2_UART_Init();
+  /* USER CODE BEGIN 2 */
+	//syslog(LOG_NOTICE, "Sample program start.");
+  int i=0;
+  int j=0;
+  int event = JS_OFF;
+  int old_event = -1;
+  char c[10];
+  char c1[26];
 
-	SVC_PERROR(cSysLog_mask(LOG_UPTO(LOG_INFO), LOG_UPTO(LOG_EMERG)));
-	syslog(LOG_NOTICE, "Sample program starts.");
+  printf("test s77\r\n\n\n");
 
-	/*
-	 *  シリアルポートの初期化
-	 *
-	 *  システムログタスクと同じシリアルポートを使う場合など，シリアル
-	 *  ポートがオープン済みの場合にはここでE_OBJエラーになるが，支障は
-	 *  ない．
-	 */
-	ercd = cSerialPort_open();
-	if (ercd < 0 && MERCD(ercd) != E_OBJ) {
-		syslog(LOG_ERROR, "%s (%d) reported by `cSerialPort_open'.",
-									itron_strerror(ercd), SERCD(ercd));
-	}
-	SVC_PERROR(cSerialPort_control(IOCTL_CRLF | IOCTL_FCSND | IOCTL_FCRCV));
+  consume_time(1000LU);
+  cADC_StartDMA(&hadc1,(uint16_t*) &adc_data, 1);
+    //printf("irror");
+  //} 
+  printf("error");
+  while(i<100000){
+    //printf("%d\r\n",adc_data);
+    //sprintf(c,"%d\r\n",adc_data);
+    //HAL_UART_Transmit(&huart2, c , sizeof(c) , 10);
+    for(j = 0 ; j < NUM_JSPOSITION ; j++){
+      if(adc_data < pos_tbl[j][0]){
+        event = pos_tbl[j][1];
+        break;
+      }
+    }
+    if(event != old_event){
+      //HAL_UART_Transmit(&huart2, c1 , sizeof(c1) , 10);
+      printf("%d:[%s] val(%d)\r\n", i, pos_str[event], adc_data);
+      old_event = event;
+    }
+    delay(1000);
+    i++;
+  }
+  HAL_ADC_Stop_DMA(&hadc1);
+  printf("after%d\r\n",hadc1.State);
 
-	/*
- 	 *  ループ回数の設定
-	 *
-	 *  並行実行されるタスク内でのループの回数（task_loop）は，ループ
-	 *  の実行時間が約0.4秒になるように設定する．この設定のために，
-	 *  LOOP_REF回のループの実行時間を，その前後でgetTimeを呼ぶことで
-	 *  測定し，その測定結果から空ループの実行時間が0.4秒になるループ
-	 *  回数を求め，task_loopに設定する．
-	 *
-	 *  LOOP_REFは，デフォルトでは1,000,000に設定しているが，想定した
-	 *  より遅いプロセッサでは，サンプルプログラムの実行開始に時間がか
-	 *  かりすぎるという問題を生じる．逆に想定したより速いプロセッサで
-	 *  は，LOOP_REF回のループの実行時間が短くなり，task_loopに設定す
-	 *  る値の誤差が大きくなるという問題がある．そこで，そのようなター
-	 *  ゲットでは，target_test.hで，LOOP_REFを適切な値に定義すること
-	 *  とする．
-	 *
-	 *  また，task_loopの値を固定したい場合には，その値をTASK_LOOPにマ
-	 *  クロ定義する．TASK_LOOPがマクロ定義されている場合，上記の測定
-	 *  を行わずに，TASK_LOOPに定義された値をループの回数とする．
-	 *
-	 *  ターゲットによっては，ループの実行時間の1回目の測定で，本来より
-	 *  も長めになるものがある．このようなターゲットでは，MEASURE_TWICE
-	 *  をマクロ定義することで，1回目の測定結果を捨てて，2回目の測定結
-	 *  果を使う．
-	 */
-#ifdef TASK_LOOP
-	task_loop = TASK_LOOP;
-#else /* TASK_LOOP */
 
-#ifdef MEASURE_TWICE
-	SVC_PERROR(getTime(&stime1));
-	consume_time(LOOP_REF);
-	SVC_PERROR(getTime(&stime2));
-#endif /* MEASURE_TWICE */
+}
 
-	SVC_PERROR(getTime(&stime1));
-	consume_time(LOOP_REF);
-	SVC_PERROR(getTime(&stime2));
-	task_loop = LOOP_REF * 400LU / (ulong_t)(stime2 - stime1) * 1000LU;
+void MX_USART2_UART_Init(void)
+{
 
-#endif /* TASK_LOOP */
+  /* USER CODE BEGIN USART2_Init 0 */
 
-	/*
- 	 *  タスクの起動
-	 */
-	SVC_PERROR(cTask_activate(1));
-	SVC_PERROR(cTask_activate(2));
-	SVC_PERROR(cTask_activate(3));
+  /* USER CODE END USART2_Init 0 */
 
-	/*
- 	 *  メインループ
-	 */
-	do {
-		SVC_PERROR(cSerialPort_read(&c, 1));
-		switch (c) {
-		case 'e':
-		case 's':
-		case 'S':
-		case 'd':
-		case 'y':
-		case 'Y':
-		case 'z':
-		case 'Z':
-			message[tskno-1] = c;
-			break;
-		case '1':
-			tskno = 1;
-			break;
-		case '2':
-			tskno = 2;
-			break;
-		case '3':
-			tskno = 3;
-			break;
-		case 'a':
-			syslog(LOG_INFO, "#cTask_activate(%d)", tskno);
-			SVC_PERROR(cTask_activate(tskno));
-			break;
-		case 'A':
-			syslog(LOG_INFO, "#cTask_cancelActivate(%d)", tskno);
-			SVC_PERROR(ercd = cTask_cancelActivate(tskno));
-			if (ercd >= 0) {
-				syslog(LOG_NOTICE, "cTask_cancelActivate(%d) returns %d",
-															tskno, ercd);
-			}
-			break;
-		case 't':
-			syslog(LOG_INFO, "#cTask_terminate(%d)", tskno);
-			SVC_PERROR(cTask_terminate(tskno));
-			break;
-		case '>':
-			syslog(LOG_INFO, "#cTask_changePriority(%d, HIGH_PRIORITY)", tskno);
-			SVC_PERROR(cTask_changePriority(tskno, HIGH_PRIORITY));
-			break;
-		case '=':
-			syslog(LOG_INFO, "#cTask_changePriority(%d, MID_PRIORITY)", tskno);
-			SVC_PERROR(cTask_changePriority(tskno, MID_PRIORITY));
-			break;
-		case '<':
-			syslog(LOG_INFO, "#(cTask_changePriority(%d, LOW_PRIORITY)", tskno);
-			SVC_PERROR(cTask_changePriority(tskno, LOW_PRIORITY));
-			break;
-		case 'G':
-			syslog(LOG_INFO, "#cTask_getPriority(%d, &tskpri)", tskno);
-			SVC_PERROR(ercd = cTask_getPriority(tskno, &tskpri));
-			if (ercd >= 0) {
-				syslog(LOG_NOTICE, "priority of task %d is %d", tskno, tskpri);
-			}
-			break;
-		case 'w':
-			syslog(LOG_INFO, "#cTask_wakeup(%d)", tskno);
-			SVC_PERROR(cTask_wakeup(tskno));
-			break;
-		case 'W':
-			syslog(LOG_INFO, "#cTask_cancelWakeup(%d)", tskno);
-			SVC_PERROR(ercd = cTask_cancelWakeup(tskno));
-			if (ercd >= 0) {
-				syslog(LOG_NOTICE, "cTask_cancelWakeup(%d) returns %d",
-															tskno, ercd);
-			}
-			break;
-		case 'l':
-			syslog(LOG_INFO, "#cTask_releaseWait(%d)", tskno);
-			SVC_PERROR(cTask_releaseWait(tskno));
-			break;
-		case 'u':
-			syslog(LOG_INFO, "#cTask_suspend(%d)", tskno);
-			SVC_PERROR(cTask_suspend(tskno));
-			break;
-		case 'm':
-			syslog(LOG_INFO, "#cTask_resume(%d)", tskno);
-			SVC_PERROR(cTask_resume(tskno));
-			break;
-		case 'x':
-			syslog(LOG_INFO, "#cTask_raiseTerminate(%d)", tskno);
-			SVC_PERROR(cTask_raiseTerminate(tskno));
-			break;
-		case 'X':
-			syslog(LOG_INFO, "#cTask_raiseTerminate(%d)", tskno);
-			SVC_PERROR(cTask_raiseTerminate(tskno));
-			break;
-		case 'r':
-			syslog(LOG_INFO, "#rotateReadyQueue(three priorities)");
-			SVC_PERROR(rotateReadyQueue(HIGH_PRIORITY));
-			SVC_PERROR(rotateReadyQueue(MID_PRIORITY));
-			SVC_PERROR(rotateReadyQueue(LOW_PRIORITY));
-			break;
-		case 'c':
-			syslog(LOG_INFO, "#cCyclic_start()");
-			SVC_PERROR(cCyclic_start());
-			break;
-		case 'C':
-			syslog(LOG_INFO, "#cCyclic_stop()");
-			SVC_PERROR(cCyclic_stop());
-			break;
-		case 'b':
-			syslog(LOG_INFO, "#cAlarm_start(5000000)");
-			SVC_PERROR(cAlarm_start(5000000));
-			break;
-		case 'B':
-			syslog(LOG_INFO, "#cAlarm_stop()");
-			SVC_PERROR(cAlarm_stop());
-			break;
+  /* USER CODE BEGIN USART2_Init 1 */
 
-		case 'V':
-			hrtcnt1 = fetchHighResolutionTimer();
-			consume_time(1000LU);
-			hrtcnt2 = fetchHighResolutionTimer();
-			syslog(LOG_NOTICE, "hrtcnt1 = %tu, hrtcnt2 = %tu",
-								(uint32_t) hrtcnt1, (uint32_t) hrtcnt2);
-			break;
+  /* USER CODE END USART2_Init 1 */
 
-		case 'v':
-			SVC_PERROR(cSysLog_mask(LOG_UPTO(LOG_INFO),
-										LOG_UPTO(LOG_EMERG)));
-			break;
-		case 'q':
-			SVC_PERROR(cSysLog_mask(LOG_UPTO(LOG_NOTICE),
-										LOG_UPTO(LOG_EMERG)));
-			break;
+  if (cUart_Initialize() != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /*
+  
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  */
+  
+  /* USER CODE BEGIN USART2_Init 2 */
 
-		case '\003':
-		case 'Q':
-			break;
+  /* USER CODE END USART2_Init 2 */
 
-		default:
-			syslog(LOG_INFO, "Unknown command: '%c'.", c);
-			break;
-		}
-	} while (c != '\003' && c != 'Q');
+}
 
-	syslog(LOG_NOTICE, "Sample program ends.");
-	SVC_PERROR(exitKernel());
-	assert(0);
+
+/** 
+  * Enable DMA controller clock
+  */
+void MX_DMA_Init(void) 
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : B1_Pin */
+  GPIO_InitStruct.Pin = B1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : LD2_Pin */
+  GPIO_InitStruct.Pin = LD2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+}
+
+
+
+void MX_ADC2_ADC_Init(void){
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion) 
+  */
+  /*
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_CC1; //ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.NbrOfDiscConversion = 0;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  cADC_Initialize(&hadc1);
+  {
+    //Error_Handler();
+  }
+  */
+  cADC_Initialize(&hadc1);
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time. 
+  */
+  sConfig.Channel = ADC_CHANNEL_8;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_480CYCLES; //ADC_SAMPLETIME_3CYCLES;
+  HAL_ADC_ConfigChannel(&hadc1, &sConfig);
+  //{
+    //Error_Handler();
+  //}
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
+}
+
+int _write(int file, char *ptr, int len)
+{
+  cUart_Transmit((uint8_t *)ptr,len,100);
+  return len;
 }

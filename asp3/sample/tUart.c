@@ -1,0 +1,94 @@
+/*
+ * このファイルは tecsgen によりテンプレートとして自動生成されました
+ * このファイルを編集して使用することが意図されていますが
+ * tecsgen の再実行により上書きされてしまうため、通常
+ *   gen/tUsart_templ.c => src/tUsart.c
+ * のように名前, フォルダを変更してから修正します
+ */
+/* #[<PREAMBLE>]#
+ * #[<...>]# から #[</...>]# で囲まれたコメントは編集しないでください
+ * tecsmerge によるマージに使用されます
+ *
+ * 属性アクセスマクロ #_CAAM_#
+ * baudRate         uint32_t         ATTR_baudRate   
+ * wordLength       uint32_t         ATTR_wordLength 
+ * stopBits         uint32_t         ATTR_stopBits   
+ * parity           uint32_t         ATTR_parity     
+ * mode             uint32_t         ATTR_mode       
+ * hwFlowCtl        uint32_t         ATTR_hwFlowCtl  
+ * overSampling     uint32_t         ATTR_overSampling
+ * handleUart       UART_HandleTypeDef  VAR_handleUart  
+ *
+ * #[</PREAMBLE>]# */
+
+/* プロトタイプ宣言や変数の定義をここに書きます #_PAC_# */
+#include "tUart_tecsgen.h"
+
+//added by morisaki
+
+#include "stm32f4xx_hal_uart.h"
+
+#ifndef E_OK
+#define	E_OK	0		/* success */
+#define	E_ID	(-18)	/* illegal ID */
+#endif
+
+/* 受け口関数 #_TEPF_# */
+/* #[<ENTRY_PORT>]# eUart
+ * entry port: eUart
+ * signature:  sUart
+ * context:    task
+ * #[</ENTRY_PORT>]# */
+
+/* #[<ENTRY_FUNC>]# eUart_Initialize
+ * name:         eUart_Initialize
+ * global_name:  tUart_eUart_Initialize
+ * oneway:       false
+ * #[</ENTRY_FUNC>]# */
+HAL_StatusTypeDef
+eUart_Initialize(CELLIDX idx)
+{
+	CELLCB	*p_cellcb;
+	if (VALID_IDX(idx)) {
+		p_cellcb = GET_CELLCB(idx);
+	}
+	else {
+		/* エラー処理コードをここに記述します */
+	} /* end if VALID_IDX(idx) */
+
+	/* ここに処理本体を記述します #_TEFB_# */
+    VAR_handleUart.Instance = USART2;
+    VAR_handleUart.Init.BaudRate = ATTR_baudRate;
+    VAR_handleUart.Init.WordLength = ATTR_wordLength;
+    VAR_handleUart.Init.StopBits = ATTR_stopBits;
+    VAR_handleUart.Init.Parity = ATTR_parity;
+    VAR_handleUart.Init.Mode = ATTR_mode;
+    VAR_handleUart.Init.HwFlowCtl = ATTR_hwFlowCtl;
+    VAR_handleUart.Init.OverSampling = ATTR_overSampling;
+  
+    HAL_UART_Init(&VAR_handleUart);
+}
+
+/* #[<ENTRY_FUNC>]# eUart_Transmit
+ * name:         eUart_Transmit
+ * global_name:  tUart_eUart_Transmit
+ * oneway:       false
+ * #[</ENTRY_FUNC>]# */
+HAL_StatusTypeDef
+eUart_Transmit(CELLIDX idx, uint8_t* pData, uint16_t Size, uint32_t Timeout)
+{
+	CELLCB	*p_cellcb;
+	if (VALID_IDX(idx)) {
+		p_cellcb = GET_CELLCB(idx);
+	}
+	else {
+		/* エラー処理コードをここに記述します */
+	} /* end if VALID_IDX(idx) */
+
+	/* ここに処理本体を記述します #_TEFB_# */
+    HAL_UART_Transmit(&VAR_handleUart, pData , Size , Timeout);
+}
+
+/* #[<POSTAMBLE>]#
+ *   これより下に非受け口関数を書きます
+ * #[</POSTAMBLE>]#*/

@@ -1,0 +1,75 @@
+/*
+ * このファイルは tecsgen によりテンプレートとして自動生成されました
+ * このファイルを編集して使用することが意図されていますが
+ * tecsgen の再実行により上書きされてしまうため、通常
+ *   gen/tUsart_templ.c => src/tUsart.c
+ * のように名前, フォルダを変更してから修正します
+ */
+/* #[<PREAMBLE>]#
+ * #[<...>]# から #[</...>]# で囲まれたコメントは編集しないでください
+ * tecsmerge によるマージに使用されます
+ *
+ * #[</PREAMBLE>]# */
+
+/* プロトタイプ宣言や変数の定義をここに書きます #_PAC_# */
+#include "tUsart_tecsgen.h"
+
+//added by morisaki
+
+#include "stm32f4xx_hal_uart.h"
+
+#ifndef E_OK
+#define	E_OK	0		/* success */
+#define	E_ID	(-18)	/* illegal ID */
+#endif
+
+/* 受け口関数 #_TEPF_# */
+/* #[<ENTRY_PORT>]# eUsart
+ * entry port: eUsart
+ * signature:  sUsart
+ * context:    task
+ * #[</ENTRY_PORT>]# */
+
+/* #[<ENTRY_FUNC>]# eUsart_Initialize
+ * name:         eUsart_Initialize
+ * global_name:  tUsart_eUsart_Initialize
+ * oneway:       false
+ * #[</ENTRY_FUNC>]# */
+HAL_StatusTypeDef
+eUsart_Initialize(CELLIDX idx, UART_HandleTypeDef* huart)
+{
+	CELLCB	*p_cellcb;
+	if (VALID_IDX(idx)) {
+		p_cellcb = GET_CELLCB(idx);
+	}
+	else {
+		/* エラー処理コードをここに記述します */
+	} /* end if VALID_IDX(idx) */
+
+	/* ここに処理本体を記述します #_TEFB_# */
+    HAL_UART_Init(huart);
+}
+
+/* #[<ENTRY_FUNC>]# eUsart_HAL_UART_Transmit
+ * name:         eUsart_HAL_UART_Transmit
+ * global_name:  tUsart_eUsart_HAL_UART_Transmit
+ * oneway:       false
+ * #[</ENTRY_FUNC>]# */
+HAL_StatusTypeDef
+eUsart_HAL_UART_Transmit(CELLIDX idx, UART_HandleTypeDef* huart, uint8_t* pData, uint16_t Size, uint32_t Timeout)
+{
+	CELLCB	*p_cellcb;
+	if (VALID_IDX(idx)) {
+		p_cellcb = GET_CELLCB(idx);
+	}
+	else {
+		/* エラー処理コードをここに記述します */
+	} /* end if VALID_IDX(idx) */
+
+	/* ここに処理本体を記述します #_TEFB_# */
+    HAL_UART_Transmit(huart, pData , Size , Timeout);
+}
+
+/* #[<POSTAMBLE>]#
+ *   これより下に非受け口関数を書きます
+ * #[</POSTAMBLE>]#*/

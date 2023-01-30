@@ -37,7 +37,7 @@
  *  アの利用により直接的または間接的に生じたいかなる損害に関しても，そ
  *  の責任を負わない．
  *
- *  @(#) $Id: core_insn.h 1500 2021-07-28 12:35:13Z ertl-komori $
+ *  @(#) $Id: core_insn.h 1401 2020-04-14 08:49:46Z ertl-komori $
  */
 
 
@@ -85,17 +85,6 @@ set_primask(void){
 Inline void
 clear_primask(void){
 	Asm("cpsie i":::"memory");
-}
-
-/*
- *  PRIMASKのリード
- */
-Inline uint32_t
-get_primask(void)
-{
-	uint32_t val;
-	Asm("mrs %0, PRIMASK" : "=r"(val) :: "memory");
-	return(val);
 }
 
 /*

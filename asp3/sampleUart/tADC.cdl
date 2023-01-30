@@ -1,0 +1,11 @@
+import_C("stm32f4xx_hal.h");
+import_C("stm32f4xx_hal_adc.h");
+
+signature sADC {
+	HAL_StatusTypeDef Initialize([inout]ADC_HandleTypeDef* hadc);
+	HAL_StatusTypeDef HAL_ADC_Start_DMA([inout]ADC_HandleTypeDef* hadc, [inout]uint32_t* pData, [in]uint32_t Length);
+};
+
+celltype tADC {
+	entry sADC eADC;
+};

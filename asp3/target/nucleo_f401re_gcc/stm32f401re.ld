@@ -12,14 +12,15 @@ ENTRY(_kernel_start)
 
 SECTIONS
 {
+
 	.text :
 	{
 		__text = .;
 		*(.vector)
 		*(.text)
 		*(.text.*)
-		KEEP(*(.empty.*))
 	} > FLASH
+
 	_etext = .;
 	PROVIDE(etext = .);
 
@@ -28,6 +29,7 @@ SECTIONS
 		*(.rodata)
 		*(.rodata.*)
 	} > FLASH
+
 
 	.ARM.extab   : { *(.ARM.extab* .gnu.linkonce.armextab.*) }
 	__exidx_start = .;

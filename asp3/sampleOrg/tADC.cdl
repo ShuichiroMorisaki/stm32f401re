@@ -1,0 +1,7 @@
+
+signature sADC {
+};
+
+celltype tADC {
+	entry sADC eADC;
+};

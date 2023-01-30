@@ -1,0 +1,92 @@
+/*
+ *		サンプルプログラム(2)のコンポーネント記述ファイル
+ *
+ *  $Id: tSample2.cdl 869 2018-01-04 10:44:46Z ertl-hiro $
+ */
+
+/*
+ *  カーネルオブジェクトの定義
+ */
+import(<kernel.cdl>);
+
+/*
+ *  ターゲット非依存のセルタイプの定義
+ */
+ /*
+import("syssvc/tSerialPort.cdl");
+import("syssvc/tSysLog.cdl");
+import("syssvc/tSysLogAdapter.cdl");
+import("syssvc/tLogTask.cdl");
+import("syssvc/tBanner.cdl");
+*/
+import("tUart.cdl");
+//import("tADC.cdl");
+/*
+ *  ターゲット依存部の取り込み
+ */
+ /*
+import("target.cdl");
+*/
+/*  
+ *  サンプルプログラムのC言語ヘッダファイルの取り込み
+ */
+import_C("tSample2.h");
+import_C("stm32f4xx_hal.h");
+import_C("stm32f4xx_hal_uart.h");
+//import_C("stm32f4xx_hal_usart.h");
+
+//import_C("stm32f4xx_hal.h");
+
+/*
+ *  「セルの組上げ記述」とは，"cell"で始まる行から，それに対応する"};"
+ *  の行までのことを言う．
+ */
+
+
+/*
+ *		サンプルプログラムのセルタイプの定義
+ */
+[singleton]
+celltype tSample2 {
+	require tKernel.eKernel;			/* 呼び口名なし（例：delay）*/
+	/*require cKernel = tKernel.eKernel;/* 呼び口名あり（例：cKernel_delay）*/
+	require ciKernel = tKernel.eiKernel;/* 呼び口名あり（例：ciKernel_）*/
+
+	call sTask		    cTask;		/* タスク操作 */
+    call sUart         cUart;
+  	entry sTaskBody		eMainTask;	  	/* Mainタスク */    
+};
+
+/*
+ *		組み上げ記述
+ */
+
+cell tKernel ASPKernel {
+};
+
+cell tUart Uart {
+    //instance = {};
+    baudRate = 115200;
+    wordLength = C_EXP("UART_WORDLENGTH_8B");
+    stopBits = C_EXP("UART_STOPBITS_1");
+    parity = C_EXP("UART_PARITY_NONE");
+    mode = C_EXP("UART_MODE_TX_RX");
+    hwFlowCtl = C_EXP("UART_HWCONTROL_NONE");
+    overSampling = C_EXP("UART_OVERSAMPLING_16");
+};
+
+
+cell tTask MainTask {
+	/* 呼び口の結合 */
+	cTaskBody = Sample2.eMainTask;
+	/* 属性の設定 */
+	attribute = C_EXP("TA_ACT");
+	priority = C_EXP("MAIN_PRIORITY");
+	stackSize = C_EXP("STACK_SIZE");
+};
+
+cell tSample2 Sample2 {
+	/* 呼び口の結合 */
+	cTask = MainTask.eTask;
+    cUart = Uart.eUart;
+};

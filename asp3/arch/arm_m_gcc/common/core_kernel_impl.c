@@ -37,7 +37,7 @@
  *  アの利用により直接的または間接的に生じたいかなる損害に関しても，そ
  *  の責任を負わない．
  * 
- *  @(#) $Id: core_kernel_impl.c 1500 2021-07-28 12:35:13Z ertl-komori $
+ *  @(#) $Id: core_kernel_impl.c 1399 2020-04-12 02:28:01Z ertl-komori $
  */
 
 /*
@@ -49,25 +49,10 @@
 #include "task.h"
 
 /*
- *  TOPPERS標準割込み処理モデル実現のための変数と初期化処理
- *  ARMv6-MとARMv7,8-Mで異なるためifdefに切り分けている
- */
-
-#if __TARGET_ARCH_THUMB >= 4
-
-/*
  *  CPUロックフラグ実現のための変数
  */
 volatile bool_t		lock_flag;		/* CPUロックフラグの値を保持する変数 */
 volatile uint32_t	saved_iipm;		/* 割込み優先度マスクを保存する変数 */
-
-#else
-
-uint32_t iipm_enable_masks[(1 << TBITW_IPRI) + 1];
-uint32_t *current_iipm_enable_mask;
-volatile bool_t lock_flag;
-
-#endif /* __TARGET_ARCH_THUMB >= 4 */
 
 /*
  *  ベクタテーブル(kernel_cfg.c)
@@ -199,15 +184,11 @@ disable_exc(EXCNO excno)
 void
 core_initialize(void)
 {
-#if __TARGET_ARCH_THUMB >= 4
 	/*
 	 *  CPUロックフラグ実現のための変数の初期化
 	 */
-	lock_cpu_dsp();
-#else
-    lock_flag = true;
-    current_iipm_enable_mask = &iipm_enable_masks[IIPM_ENAALL];
-#endif /* __TARGET_ARCH_THUMB >= 4 */
+	lock_flag = true;
+	saved_iipm = IIPM_ENAALL;
 
 	/*
 	 *  ベクタテーブルを設定
@@ -219,7 +200,6 @@ core_initialize(void)
 	 *  CPUロック状態でも発生するように，BASEPRIレジスタでマスクでき
 	 *  ない'0'とする．
 	 */
-#if __TARGET_ARCH_THUMB >= 4
 	set_exc_int_priority(EXCNO_MPU, 0);
 	set_exc_int_priority(EXCNO_BUS, 0);
 	set_exc_int_priority(EXCNO_USAGE, 0);
@@ -257,10 +237,6 @@ core_initialize(void)
 	for (int i = 0; i < tnum_tsk; ++i) {
 		tcb_table[i].tskctxb.stk_top = tinib_table[i].tskinictxb.stk_top;
 	}
-#else
-	set_exc_int_priority(EXCNO_SVCALL, 0);
-	set_exc_int_priority(EXCNO_PENDSV, INT_NVIC_PRI(-1));
-#endif /* __TARGET_ARCH_THUMB >= 4 */
 }
 
 /*
@@ -289,7 +265,7 @@ void
 config_int(INTNO intno, ATR intatr, PRI intpri)
 {
 	assert(VALID_INTNO_CFGINT(intno));
-	assert(-(1 << TBITW_IPRI) <= intpri && intpri <= TMAX_INTPRI);
+	assert(TMIN_INTPRI <= intpri && intpri <= TMAX_INTPRI);
 
 	/* 
 	 *  一旦割込みを禁止する
@@ -299,18 +275,14 @@ config_int(INTNO intno, ATR intatr, PRI intpri)
 	/*
 	 *  割込み優先度をセット
 	 */
-#if __TARGET_ARCH_THUMB >= 4
 	set_exc_int_priority(intno, INT_IPM(intpri));
-#else
-	set_exc_int_priority(intno, INT_NVIC_PRI(intpri));
-#endif /* __TARGET_ARCH_THUMB >= 4 */
 
 	/*
 	 *  割込み要求マスク解除(必要な場合)
 	 */
 	if ((intatr & TA_ENAINT) != 0U) {
 		(void)enable_int(intno);
-	}
+	}    
 }
 
 /*
@@ -319,10 +291,8 @@ config_int(INTNO intno, ATR intatr, PRI intpri)
 void
 core_int_entry(void)
 {
-#if __TARGET_ARCH_THUMB >= 4
 	/* 割り込み優先度の保存 */
 	const uint32_t basepri = get_basepri();
-#endif /* __TARGET_ARCH_THUMB >= 4 */
 	const uint32_t intnum = get_ipsr();
 
 #ifdef TOPPERS_SUPPORT_OVRHDR
@@ -347,12 +317,8 @@ core_int_entry(void)
 #endif /* TOPPERS_SUPPORT_OVRHDR */
 
 	/* 割り込み優先度を復帰し CPU ロック解除状態へ */
-#if __TARGET_ARCH_THUMB >= 4
 	lock_flag = 0;
 	set_basepri(basepri);
-#else
-	unlock_cpu();
-#endif /* __TARGET_ARCH_THUMB >= 4 */
 }
 
 #ifndef OMIT_DEFAULT_EXC_HANDLER

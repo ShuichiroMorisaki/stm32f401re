@@ -1,0 +1,24 @@
+import_C("stm32f4xx_hal.h");
+import_C("stm32f4xx_hal_uart.h");
+
+signature sUart {
+	HAL_StatusTypeDef Initialize(void);
+	HAL_StatusTypeDef HAL_UART_Transmit([inout]uint8_t *pData, [in]uint16_t Size, [in]uint32_t Timeout);
+};
+
+celltype tUart {
+	entry sUart eUart;
+	attr{
+		//USART_TypeDef instance;
+  		uint32_t baudRate;
+  		uint32_t wordLength;
+  		uint32_t stopBits;
+  		uint32_t parity;
+ 		uint32_t mode;
+  		uint32_t hwFlowCtl;
+  		uint32_t overSampling;
+	};
+	var{
+		UART_HandleTypeDef handleUart;
+	};
+};
